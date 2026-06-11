@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/habit.dart';
-import '../services/storage_service.dart';
+import '../services/firestore_service.dart';
 
 class ManageHabitsScreen extends StatefulWidget {
   const ManageHabitsScreen({super.key});
@@ -10,10 +10,11 @@ class ManageHabitsScreen extends StatefulWidget {
 }
 
 class _ManageHabitsScreenState extends State<ManageHabitsScreen> {
-  final StorageService storageService = StorageService();
+  final FirestoreService firestoreService = FirestoreService();
   final TextEditingController habitController = TextEditingController();
 
   List<Habit> habits = [];
+  bool isLoading = true;
 
   @override
   void initState() {
@@ -22,18 +23,15 @@ class _ManageHabitsScreenState extends State<ManageHabitsScreen> {
   }
 
   Future<void> loadHabits() async {
-    List<Habit> savedHabits = await storageService.loadHabits();
+    List<Habit> savedHabits = await firestoreService.loadHabits();
 
     setState(() {
       habits = savedHabits;
+      isLoading = false;
     });
   }
 
-  Future<void> saveHabits() async {
-    await storageService.saveHabits(habits);
-  }
-
-  void addHabit() {
+  Future<void> addHabit() async {
     String habitName = habitController.text.trim();
 
     if (habitName.isEmpty) {
@@ -42,20 +40,24 @@ class _ManageHabitsScreenState extends State<ManageHabitsScreen> {
 
     String habitId = DateTime.now().millisecondsSinceEpoch.toString();
 
+    Habit newHabit = Habit(id: habitId, name: habitName);
+
     setState(() {
-      habits.add(Habit(id: habitId, name: habitName));
+      habits.add(newHabit);
       habitController.clear();
     });
 
-    saveHabits();
+    await firestoreService.saveHabit(newHabit);
   }
 
-  void deleteHabit(int index) {
+  Future<void> deleteHabit(int index) async {
+    String habitId = habits[index].id;
+
     setState(() {
       habits.removeAt(index);
     });
 
-    saveHabits();
+    await firestoreService.deleteHabit(habitId);
   }
 
   @override
@@ -133,7 +135,9 @@ class _ManageHabitsScreenState extends State<ManageHabitsScreen> {
             const SizedBox(height: 12),
 
             Expanded(
-              child: habits.isEmpty
+              child: isLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : habits.isEmpty
                   ? Center(
                       child: Text(
                         'No habits created yet.\nAdd your first habit above.',
